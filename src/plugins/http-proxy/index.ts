@@ -1,41 +1,47 @@
 import fp from "fastify-plugin";
 import replyFrom from "fastify-reply-from";
 import { HTTP_METHODS } from "./constants/http-methods.constant";
-import { Options } from "./interfaces/options.interface";
+import { Options, PrefixOptions } from "./interfaces/options.interface";
 
 export const httpProxy = fp<Options>(async (fastify, options) => {
-  fastify.register(replyFrom, {
-    logLevel: "debug",
-  });
+  fastify.register(replyFrom);
 
-  let {
-    prefix = ["/api/service", "/api/ignore", "/api/query"],
-    defaultPathRewrite = "/api",
-    proxies,
-  } = options;
+  let { defaultPrefix = { "/api": {} }, proxies = {} } = options;
 
-  if (!Array.isArray(prefix)) {
-    prefix = [prefix];
-  }
+  const prefixOptions: PrefixOptions =
+    typeof defaultPrefix === "string" ? { [defaultPrefix]: {} } : defaultPrefix;
 
-  Object.keys(options.proxies).map((serviceName) => {
-    const serviceOptions = options.proxies[serviceName];
+  const prefixList = Object.keys(prefixOptions);
 
-    const { target, pathRewrite, headers, methods } = serviceOptions;
+  Object.keys(proxies).map((serviceName) => {
+    const serviceOptions = proxies[serviceName];
 
-    (prefix as string[]).map((pre) => {
-      const url = `${pre}/${serviceName}/*`;
+    const {
+      target,
+      pathRewrite,
+      headers,
+      methods,
+      bodyLimit = 1 * 1024 * 1024,
+    } = serviceOptions;
 
-      fastify.log.debug(`mount api route: ${url}`);
+    prefixList.map((prefix) => {
+      const {
+        methods: defaultMethods = HTTP_METHODS,
+        pathRewrite: defaultPathRewrite = "",
+      } = prefixOptions[prefix];
+
+      const url = `${prefix}/${serviceName}/*`;
+
+      fastify.log.debug(`http-proxy: mount api route "${url}"`);
 
       fastify.route({
         url,
-        method: methods || HTTP_METHODS,
-        bodyLimit: 1 * 1024 * 1024,
+        method: methods || defaultMethods,
+        bodyLimit,
         handler: function handler(request, reply) {
           let path = request.raw.url || "";
 
-          fastify.log.debug(`originPath: ${path}`);
+          fastify.log.debug(`http-proxy: originPath is ${path}`);
 
           if (pathRewrite) {
             const matched = Object.entries(pathRewrite).find(([oldPath]) =>
@@ -46,10 +52,10 @@ export const httpProxy = fp<Options>(async (fastify, options) => {
               path = matched[1] + path.slice(matched[0].length);
             }
           } else {
-            path = path.replace(pre, defaultPathRewrite);
+            path = path.replace(prefix, defaultPathRewrite);
           }
 
-          fastify.log.debug(`rewritePath: ${path}`);
+          fastify.log.debug(`http-proxy: rewritePath is ${path}`);
 
           reply.from(`${target}${path}`, {});
         },

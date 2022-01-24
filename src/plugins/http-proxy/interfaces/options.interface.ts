@@ -1,15 +1,24 @@
 import { HTTPMethods } from "fastify";
 
+export interface ProxyOptions {
+  url?: string;
+  target: string;
+  pathRewrite?: { [key: string]: string };
+  bodyLimit?: number;
+  headers?: [string, string][];
+  methods?: HTTPMethods[];
+}
+
+export interface PrefixOptions {
+  [prefix: string]: {
+    pathRewrite?: string;
+    methods?: HTTPMethods[];
+  };
+}
+
 export interface Options {
-  prefix?: string | string[]; // ["/api/service", "/api/ignore", "/api/query"]
-  defaultPathRewrite?: string; // "/api"
-  proxies: {
-    [serviceName: string]: {
-      target: string;
-      pathRewrite?: { [key: string]: string };
-      limit?: string; // 1mb
-      headers?: [string, string][];
-      methods?: HTTPMethods[];
-    };
+  defaultPrefix?: string | PrefixOptions;
+  proxies?: {
+    [serviceName: string]: ProxyOptions;
   };
 }
