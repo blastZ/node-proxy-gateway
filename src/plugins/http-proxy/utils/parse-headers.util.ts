@@ -1,7 +1,6 @@
-export function parseHeaders(
-  headers: [string, string][],
-  data: Record<string, unknown>
-) {
+import { AuthInfo } from "../interfaces/auth-info.interface";
+
+export function parseHeaders(headers: [string, string][], authInfo?: AuthInfo) {
   const result: Record<string, string> = {};
 
   headers.map(([headerKey, valueOrKey]) => {
@@ -10,7 +9,7 @@ export function parseHeaders(
       if (key.includes(".")) {
         const keys = key.split(".");
 
-        let value: unknown = data;
+        let value: unknown = authInfo || {};
         let vTag = false;
 
         for (let k of keys) {
@@ -29,7 +28,7 @@ export function parseHeaders(
           result[headerKey] = encodeURI(String(value));
         }
       } else {
-        const value = (data as Record<string, unknown>)?.[key];
+        const value = ((authInfo || {}) as Record<string, unknown>)?.[key];
         if (typeof value !== "undefined" && value !== null) {
           result[headerKey] = encodeURI(String(value));
         }

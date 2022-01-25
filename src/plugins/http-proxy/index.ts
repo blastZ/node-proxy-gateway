@@ -1,10 +1,16 @@
 import fp from "fastify-plugin";
 import replyFrom from "fastify-reply-from";
+import { IncomingHttpHeaders } from "http";
 import { HTTP_METHODS } from "./constants/http-methods.constant";
 import { Options, PrefixOptions } from "./interfaces/options.interface";
+import { parseHeaders } from "./utils/parse-headers.util";
 
 export const httpProxy = fp<Options>(async (fastify, options) => {
   fastify.register(replyFrom);
+
+  const logger = fastify.log.child({
+    stage: "@blastz/fastify-plugin-http-proxy",
+  });
 
   let { defaultPrefix = { "/api": {} }, proxies = {} } = options;
 
@@ -19,7 +25,7 @@ export const httpProxy = fp<Options>(async (fastify, options) => {
     const {
       target,
       pathRewrite,
-      headers,
+      headers = [],
       methods,
       bodyLimit = 1 * 1024 * 1024,
     } = serviceOptions;
@@ -32,7 +38,7 @@ export const httpProxy = fp<Options>(async (fastify, options) => {
 
       const url = `${prefix}/${serviceName}/*`;
 
-      fastify.log.debug(`http-proxy: mount api route "${url}"`);
+      logger.debug(`mount api route "${url}"`);
 
       fastify.route({
         url,
@@ -41,7 +47,7 @@ export const httpProxy = fp<Options>(async (fastify, options) => {
         handler: function handler(request, reply) {
           let path = request.raw.url || "";
 
-          fastify.log.debug(`http-proxy: originPath is ${path}`);
+          logger.debug(`origin path is ${path}`);
 
           if (pathRewrite) {
             const matched = Object.entries(pathRewrite).find(([oldPath]) =>
@@ -55,9 +61,38 @@ export const httpProxy = fp<Options>(async (fastify, options) => {
             path = path.replace(prefix, defaultPathRewrite);
           }
 
-          fastify.log.debug(`http-proxy: rewritePath is ${path}`);
+          logger.debug(`rewrite path is ${path}`);
 
-          reply.from(`${target}${path}`, {});
+          reply.from(`${target}${path}`, {
+            rewriteRequestHeaders: function (originReq, originHeaders) {
+              logger.child({ originHeaders }).debug("log origin headers");
+
+              const rewriteHeaders = headers.map((o) => o[0]);
+              const newHeaders = Object.keys(originHeaders).reduce(
+                (result, key) => {
+                  if (rewriteHeaders.includes(key)) {
+                    return result;
+                  }
+
+                  result[key] = originHeaders[key];
+
+                  return result;
+                },
+                {} as IncomingHttpHeaders
+              );
+
+              const appendHeaders = parseHeaders(headers, undefined);
+
+              const customHeaders = {
+                ...newHeaders,
+                ...appendHeaders,
+              };
+
+              logger.child({ customHeaders }).debug("log custom headers");
+
+              return customHeaders;
+            },
+          });
         },
       });
     });
@@ -65,4 +100,5 @@ export const httpProxy = fp<Options>(async (fastify, options) => {
 });
 
 export * from "./constants/http-methods.constant";
+export * from "./interfaces/auth-info.interface";
 export * from "./interfaces/options.interface";
