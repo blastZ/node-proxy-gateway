@@ -16,7 +16,7 @@ export interface PrefixOptions {
   };
 }
 
-export interface Options {
+export interface HttpProxyOptions {
   defaultPrefix?: string | PrefixOptions;
   proxies?: {
     [serviceName: string]: ProxyOptions;

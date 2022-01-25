@@ -2,10 +2,24 @@ import fp from "fastify-plugin";
 import replyFrom from "fastify-reply-from";
 import { IncomingHttpHeaders } from "http";
 import { HTTP_METHODS } from "./constants/http-methods.constant";
-import { Options, PrefixOptions } from "./interfaces/options.interface";
+import { AuthInfo } from "./interfaces/auth-info.interface";
+import {
+  HttpProxyOptions,
+  PrefixOptions,
+} from "./interfaces/options.interface";
 import { parseHeaders } from "./utils/parse-headers.util";
 
-export const httpProxy = fp<Options>(async (fastify, options) => {
+declare module "fastify" {
+  interface FastifyRequest {
+    authInfo?: AuthInfo;
+  }
+}
+
+export const httpProxy = fp<HttpProxyOptions>(async (fastify, options) => {
+  fastify.addContentTypeParser("*", (request, payload, done) => {
+    done(null, request.raw);
+  });
+
   fastify.register(replyFrom);
 
   const logger = fastify.log.child({
@@ -23,6 +37,7 @@ export const httpProxy = fp<Options>(async (fastify, options) => {
     const serviceOptions = proxies[serviceName];
 
     const {
+      url: customUrl,
       target,
       pathRewrite,
       headers = [],
@@ -36,7 +51,9 @@ export const httpProxy = fp<Options>(async (fastify, options) => {
         pathRewrite: defaultPathRewrite = "",
       } = prefixOptions[prefix];
 
-      const url = `${prefix}/${serviceName}/*`;
+      const url = customUrl
+        ? `${prefix}${customUrl}`
+        : `${prefix}/${serviceName}/*`;
 
       logger.debug(`mount api route "${url}"`);
 
@@ -81,7 +98,7 @@ export const httpProxy = fp<Options>(async (fastify, options) => {
                 {} as IncomingHttpHeaders
               );
 
-              const appendHeaders = parseHeaders(headers, undefined);
+              const appendHeaders = parseHeaders(headers, request.authInfo);
 
               const customHeaders = {
                 ...newHeaders,
